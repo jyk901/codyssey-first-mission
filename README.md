@@ -29,7 +29,8 @@
 - [x] Git 사용자/기본 브랜치 설정 + `git config --list` 기록
 - [x] GitHub 로그인 및 저장소 연동 (gh 인증 + push)
 - [x] 트러블슈팅 3건
-- [ ] VSCode GitHub 로그인 화면 / 브라우저 접속 스크린샷 → 아래 "한계" 참고
+- [x] 브라우저 접속 스크린샷 (주소창 포함)
+- [ ] VSCode GitHub 로그인 화면 → 아래 "한계" 참고
 
 ## 4) 저장소 구조
 ```
@@ -38,6 +39,7 @@ first-mission/
 ├── Dockerfile             # nginx:alpine 기반 커스텀 이미지
 ├── site/index.html        # 컨테이너에 COPY 되는 웹 서버 콘텐츠
 ├── bind-demo/index.html   # 바인드 마운트 실습용 파일 (최종 상태 사본)
+├── docs/screenshots/      # 브라우저 접속 화면 (8080, 8081, 8082)
 └── logs/                  # 명령 + 출력 원문 로그 (01~09)
 ```
 
@@ -268,6 +270,12 @@ CONTAINER ID   NAME       CPU %     MEM USAGE / LIMIT     MEM %     NET I/O     
 149ba3934d5e   web-8081   0.00%     14.66MiB / 7.568GiB   0.19%     1.59kB / 917B     0B / 8.19kB   17
 0f7d3c21aab8   web-8080   3.19%     14.92MiB / 7.568GiB   0.19%     2.41kB / 1.43kB   0B / 12.3kB   17
 ```
+**브라우저 접속 화면 (주소창에 포트 표시)**
+
+| 8080 | 8081 |
+|---|---|
+| ![8080](docs/screenshots/port_8080.png) | ![8081](docs/screenshots/port_8081.png) |
+
 - 컨테이너는 격리된 네트워크를 쓰므로, **호스트 포트 → 컨테이너 포트(`-p 8080:80`)** 로 연결해야 밖에서 접속할 수 있다. 같은 이미지를 두 포트(8080, 8081)에 띄워도 같은 응답이 나온다(재현성).
 
 ### 6-6) 바인드 마운트 (호스트 변경이 즉시 반영)
@@ -290,6 +298,12 @@ $ curl -s http://localhost:8082   (변경 후)
 $ docker inspect web-bind --format "{{json .Mounts}}"
 [{"Type":"bind","Source":"C:/Users/jyk90/codyssey/bind-demo","Destination":"/usr/share/nginx/html","Mode":"ro","RW":false,"Propagation":"rprivate"}]
 ```
+**바인드 마운트 변경 후 브라우저 화면 (8082)**
+
+![8082](docs/screenshots/bind_mount_8082_after.png)
+
+(스크린샷용으로 `bind-demo/index.html`에 `<meta charset="utf-8">`를 추가했다. 선언이 없으면 한글이 깨져 보였다.)
+
 - 호스트 파일을 수정만 했는데 **컨테이너 재시작 없이** 응답이 `BEFORE → AFTER`로 바뀌었다.
 
 ### 6-7) Docker 볼륨 영속성
@@ -446,6 +460,5 @@ curl http://localhost:8080
 - 위 명령은 Docker Desktop(WSL2)이 실행 중이어야 한다. 경로(`C:/Users/jyk90/...`)는 내 PC 기준이므로 본인 경로로 바꿔 쓴다.
 
 ## 9) 한계 (정직한 기록)
-- **브라우저 접속 스크린샷(주소창 포함)** 은 CLI 작업이라 찍지 못했다. 대신 `curl`의 응답/헤더/액세스 로그를 증거로 남겼다. 제출 전 `http://localhost:8080` 화면을 캡처해 `docs/`에 추가하면 요구사항을 완전히 충족한다.
 - **VSCode GitHub 로그인 화면**: 이 PC에는 `code` 명령이 없어 VSCode 연동은 수행하지 못했다. 대신 `gh auth login` 상태와 `git push` 결과로 GitHub 연동을 확인했다.
 - 로그는 실행 당시 출력을 모은 것이며, 시각/ID 등은 재실행 시 달라진다.
