@@ -1,0 +1,45 @@
+$ docker build -t my-web:1.0 .
+#6 DONE 0.1s
+
+#7 exporting to image
+#7 exporting layers 0.0s done
+#7 exporting manifest sha256:cce23ae82074133388d6f9c0b32d3a067d44919d3063bcc8d42cc3993bae46c8 done
+#7 exporting config sha256:1575f4b76c67a831700a558929b4401ba37edffd00ceca1174531dfa36d95e02 done
+#7 exporting attestation manifest sha256:43593fafca126b448daaf6c7e01affff651ab398e33708c4b22ce44a8e0250a9 0.0s done
+#7 exporting manifest list sha256:3695e1e6e7727dfdec7422d0e5d8f3c0832ba1cf5e4f6521213c6b834a501777 done
+#7 naming to docker.io/library/my-web:1.0 done
+#7 unpacking to docker.io/library/my-web:1.0
+#7 unpacking to docker.io/library/my-web:1.0 0.7s done
+#7 DONE 0.8s
+$ docker run -d -p 8080:80 --name web-8080 my-web:1.0
+0f7d3c21aab86017a19c4c8364c8539a07588577677e0c9d8825b8a49bfa00c4
+$ docker run -d -p 8081:80 --name web-8081 my-web:1.0
+149ba3934d5ebf5923e0710c94ceb49656734bdc10ca20d443f9f1156e66363c
+$ docker ps
+NAMES      IMAGE        PORTS                                     STATUS
+web-8081   my-web:1.0   0.0.0.0:8081->80/tcp, [::]:8081->80/tcp   Up 4 seconds (health: starting)
+web-8080   my-web:1.0   0.0.0.0:8080->80/tcp, [::]:8080->80/tcp   Up 5 seconds (health: starting)
+$ curl -s http://localhost:8080
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>My Custom Nginx</title></head>
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ curl -s http://localhost:8081
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>My Custom Nginx</title></head>
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ curl -sI http://localhost:8080 | head -3
+HTTP/1.1 200 OK
+Server: nginx/1.31.8
+Date: Sat, 31 Oct 2026 07:20:28 GMT
+$ docker logs web-8080 | tail -3
+2026/10/31 07:20:21 [notice] 1#1: start worker process 45
+172.17.0.1 - - [31/Oct/2026:07:20:28 +0000] "GET / HTTP/1.1" 200 174 "-" "curl/8.21.0" "-"
+172.17.0.1 - - [31/Oct/2026:07:20:28 +0000] "HEAD / HTTP/1.1" 200 0 "-" "curl/8.21.0" "-"
+$ docker exec web-8080 env | grep APP_ENV
+APP_ENV=dev
+$ docker inspect --format "{{.Config.Labels}}" my-web:1.0
+map[maintainer:NGINX Docker Maintainers <docker-maint@nginx.com> org.opencontainers.image.title:My-custom-nginx]
+$ docker stats --no-stream
+CONTAINER ID   NAME       CPU %     MEM USAGE / LIMIT     MEM %     NET I/O           BLOCK I/O     PIDS
+149ba3934d5e   web-8081   0.00%     14.66MiB / 7.568GiB   0.19%     1.59kB / 917B     0B / 8.19kB   17
+0f7d3c21aab8   web-8080   3.19%     14.92MiB / 7.568GiB   0.19%     2.41kB / 1.43kB   0B / 12.3kB   17
