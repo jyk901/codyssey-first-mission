@@ -1,0 +1,41 @@
+$ bash --version | head -1
+GNU bash, version 5.3.15(2)-release (x86_64-pc-cygwin)
+$ mkdir -p ~/codyssey/practice && cd ~/codyssey/practice
+$ pwd
+/c/Users/jyk90/codyssey/practice
+$ ls -la
+total 0
+drwxr-xr-x 1 jyk90 197609 0 Oct 31 16:19 .
+drwxr-xr-x 1 jyk90 197609 0 Oct 31 16:19 ..
+$ touch empty.txt .hidden
+$ echo "hello codyssey" > note.txt
+$ cat note.txt
+hello codyssey
+$ mkdir -p docs/sub
+$ ls -la   (숨김 파일 포함)
+total 1
+drwxr-xr-x 1 jyk90 197609  0 Oct 31 16:19 .
+drwxr-xr-x 1 jyk90 197609  0 Oct 31 16:19 ..
+-rw-r--r-- 1 jyk90 197609  0 Oct 31 16:19 .hidden
+drwxr-xr-x 1 jyk90 197609  0 Oct 31 16:19 docs
+-rw-r--r-- 1 jyk90 197609  0 Oct 31 16:19 empty.txt
+-rw-r--r-- 1 jyk90 197609 15 Oct 31 16:19 note.txt
+$ cp note.txt docs/note_copy.txt
+$ mv docs/note_copy.txt docs/sub/renamed.txt   (이동+이름변경)
+$ cd docs/sub && pwd && ls -l
+/c/Users/jyk90/codyssey/practice/docs/sub
+total 1
+-rw-r--r-- 1 jyk90 197609 15 Oct 31 16:19 renamed.txt
+$ cat docs/sub/renamed.txt
+hello codyssey
+$ rm empty.txt .hidden docs/sub/renamed.txt && rmdir docs/sub docs   (삭제)
+$ ls -la
+total 1
+drwxr-xr-x 1 jyk90 197609  0 Oct 31 16:19 .
+drwxr-xr-x 1 jyk90 197609  0 Oct 31 16:19 ..
+-rw-r--r-- 1 jyk90 197609 15 Oct 31 16:19 note.txt
+--- 절대 경로 vs 상대 경로 ---
+$ cat /c/Users/jyk90/codyssey/practice/note.txt   (절대)
+hello codyssey
+$ cd ~ && cat codyssey/practice/note.txt   (상대: 현재 위치 기준)
+hello codyssey

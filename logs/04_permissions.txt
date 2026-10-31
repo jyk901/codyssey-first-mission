@@ -1,0 +1,19 @@
+# 권한 실습: Windows(NTFS)는 chmod가 의미 없어 Linux 컨테이너(ubuntu) 내부에서 수행
+$ ls -l pfile.txt; ls -ld pdir   (변경 전)
+-rw-r--r-- 1 root root 7 Oct 31 07:20 pfile.txt
+drwxr-xr-x 2 root root 4096 Oct 31 07:20 pdir
+$ chmod 600 pfile.txt  → 소유자만 rw
+-rw------- 1 root root 7 Oct 31 07:20 pfile.txt
+600 pfile.txt
+$ chmod 755 pdir  → rwxr-xr-x
+drwxr-xr-x 2 root root 4096 Oct 31 07:20 pdir
+755 pdir
+$ chmod 644 pfile.txt → rw-r--r--
+644 pfile.txt
+$ chmod 700 pdir ; 일반 사용자(nobody)로 접근 시도
+drwx------ 2 root root 4096 Oct 31 07:20 pdir
+ls: cannot open directory '/tmp/pdir': Permission denied
+$ chmod 000 pfile.txt; nobody가 읽기 시도
+cat: /tmp/pfile.txt: Permission denied
+secret
+dir-ok
