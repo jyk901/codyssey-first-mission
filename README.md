@@ -22,7 +22,6 @@
 - [x] Docker 기본 운영 (`images`, `ps`, `ps -a`, `logs`, `stats`)
 - [x] hello-world 실행
 - [x] ubuntu 컨테이너 실행/내부 진입/종료·유지 차이 관찰
-- [x] `exec`와 `attach` 차이 확인
 - [x] Dockerfile 작성 → 커스텀 이미지 빌드/실행
 - [x] 포트 매핑 접속 (8080, 8081 두 번)
 - [x] 바인드 마운트 반영 (변경 전/후 비교)
@@ -41,7 +40,7 @@ first-mission/
 ├── site/index.html        # 컨테이너에 COPY 되는 웹 서버 콘텐츠
 ├── bind-demo/index.html   # 바인드 마운트 실습용 파일 (최종 상태 사본)
 ├── docs/screenshots/      # 브라우저 접속 화면 (8080, 8081, 8082)
-└── logs/                  # 명령 + 출력 원문 로그 (01~10)
+└── logs/                  # 명령 + 출력 원문 로그 (01~09)
 ```
 
 ## 5) 검증 방법과 증거 위치
@@ -54,7 +53,6 @@ first-mission/
 | 빌드 + 포트 매핑 | `docker build`, `docker run -p`, `curl` | [logs/05_build_port.txt](logs/05_build_port.txt) |
 | 바인드 마운트 | `docker run -v`, 호스트 파일 수정 후 `curl` | [logs/07_bind_mount_fixed.txt](logs/07_bind_mount_fixed.txt) |
 | 볼륨 영속성 | `docker volume create`, 컨테이너 `rm -f` 후 재연결 | [logs/06_mount_volume.txt](logs/06_mount_volume.txt) |
-| exec/attach | `docker attach`, `docker exec ps`, `docker logs` | [logs/10_exec_attach.txt](logs/10_exec_attach.txt) |
 | 최종 상태 | `docker ps -a`, `docker images` | [logs/08_final_ps.txt](logs/08_final_ps.txt) |
 | Git/GitHub | `git config --list`, `gh auth status` | [logs/09_git_config.txt](logs/09_git_config.txt) |
 
@@ -108,7 +106,7 @@ hello codyssey
   **상대 경로**는 *현재 위치* 기준이라 `cd ~` 후에는 `codyssey/practice/note.txt`처럼 다르게 쓴다.
 
 ### 6-2) 권한 실습
-Windows(NTFS/FAT32)는 `chmod`가 실질적 의미가 없어서, **Linux 컨테이너(ubuntu 22.04) 안에서** 실습했다(WSL Ubuntu 배포판은 설치하지 않았고, 같은 Linux 권한 체계를 컨테이너에서 확인했다).
+Windows(NTFS/FAT32)는 `chmod`가 실질적 의미가 없어서, **Linux 컨테이너(ubuntu) 안에서** 실습했다.
 ```bash
 # 권한 실습: Windows(NTFS)는 chmod가 의미 없어 Linux 컨테이너(ubuntu) 내부에서 수행
 $ ls -l pfile.txt; ls -ld pdir   (변경 전)
@@ -203,51 +201,6 @@ To generate this message, Docker took the following steps:
  1. The Docker client contacted the Docker daemon.
 ```
 - **종료/유지 차이**: `docker run ubuntu echo ...`는 명령이 끝나면 컨테이너도 `Exited (0)`로 끝난다. `sleep infinity`처럼 계속 도는 프로세스(PID 1)가 있으면 `Up` 상태로 유지되고 `docker exec`로 들어갈 수 있다. `docker stop`으로 멈추면 `Exited (137)`(SIGKILL 종료 코드)이 된다.
-
-### 6-3b) `exec` vs `attach`
-```bash
-$ docker run -d --name att ubuntu:22.04 bash -c "i=0; while true; do echo tick \$i; i=\$((i+1)); sleep 1; done"
-2187077bc92c38f14aeeba8663358cd9541df8a53b731beb28a0f1123ddffd53
-
-# [attach] 컨테이너의 "메인 프로세스(PID 1)" 화면에 붙는다 → 메인 프로세스가 출력하는 tick이 보인다 (4초 후 강제로 떼어냄)
-$ timeout 4 docker attach --sig-proxy=false att
-tick 4
-tick 5
-tick 6
-tick 7
-(attach 종료, 종료코드 124)
-
-# attach를 떼어내도 컨테이너는 계속 실행 중
-$ docker ps --filter name=att --format "{{.Names}}  {{.Status}}"
-att  Up 8 seconds
-
-# [exec] 실행 중인 컨테이너 "안에서 새 프로세스"를 따로 시작한다 → 메인 프로세스와 별개
-$ docker exec att ps -eo pid,ppid,cmd
-    PID    PPID CMD
-      1       0 bash -c i=0; while true; do echo tick $i; i=$((i+1)); sleep 1; done
-     15       1 sleep 1
-     16       0 ps -eo pid,ppid,cmd
-$ docker exec att bash -c "echo exec로 새로 띄운 프로세스; exit"
-exec로 새로 띄운 프로세스
-
-# exec 프로세스가 끝나도 컨테이너는 그대로 실행 중
-$ docker ps --filter name=att --format "{{.Names}}  {{.Status}}"
-att  Up 9 seconds
-
-# exec로 출력한 글자는 attach 화면(메인 프로세스 출력)에 나타나지 않는다 → 직접 확인
-$ docker logs --tail 3 att
-tick 8
-tick 9
-tick 10
-$ docker rm -f att  (정리)
-```
-| | `docker exec` | `docker attach` |
-|---|---|---|
-| 하는 일 | 실행 중인 컨테이너 **안에서 새 프로세스**를 시작 | 컨테이너의 **메인 프로세스(PID 1)** 의 입출력에 연결 |
-| 로그에서 확인한 것 | `ps`에 PID 16으로 새 프로세스가 생김 | 메인 프로세스가 출력하는 `tick`이 그대로 보임 |
-| 끝냈을 때 | 새 프로세스만 끝나고 컨테이너는 `Up` 유지 | 연결만 끊김(`--sig-proxy=false`로 신호를 전달하지 않아 컨테이너는 `Up` 유지) |
-- 종료코드 `124`는 `timeout 4`가 4초 뒤 attach 명령을 끊었다는 뜻이다(컨테이너 오류가 아님).
-- 주의: 신호 전달을 켠 채 attach한 상태에서 `Ctrl+C`를 누르면 메인 프로세스에 전달되어 컨테이너가 멈출 수 있다. 이 부분은 이번 실습에서 직접 실행해 확인하지 않았다.
 
 ### 6-4) Dockerfile 기반 커스텀 이미지
 **선택한 방식: (A) 웹 서버 베이스 이미지 + 정적 콘텐츠 교체.** 베이스는 `nginx:alpine`.
