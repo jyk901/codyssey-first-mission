@@ -1,0 +1,7 @@
+$ docker run --rm hello-world   (이미지 캐시됨 → 메시지 확인)
+
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.

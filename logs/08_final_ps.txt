@@ -1,0 +1,13 @@
+NAMES         STATUS                            PORTS
+web-bind      Up 5 seconds                      0.0.0.0:8082->80/tcp, [::]:8082->80/tcp
+vol-test2     Up 39 seconds                     
+web-8081      Up About a minute (healthy)       0.0.0.0:8081->80/tcp, [::]:8081->80/tcp
+web-8080      Up About a minute (healthy)       0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
+ubuntu-keep   Exited (137) About a minute ago   
+ubuntu-test   Exited (0) About a minute ago     
+IMAGE                ID             DISK USAGE   CONTENT SIZE   EXTRA
+alpine:latest        be2656061b53         13MB         3.94MB        
+hello-world:latest   c567b231f656       25.9kB         9.49kB        
+my-web:1.0           3695e1e6e772       93.6MB         26.3MB   U    
+nginx:alpine         785835ea65db       94.5MB         27.2MB   U    
+ubuntu:22.04         076e7bf82319        119MB         31.7MB   U    

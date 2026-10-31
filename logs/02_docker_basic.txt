@@ -1,0 +1,57 @@
+$ docker --version
+Docker version 29.9.2, build a82e528
+$ docker info (발췌)
+ Containers: 0
+ Images: 0
+ Server Version: 29.9.2
+ Storage Driver: overlayfs
+ Operating System: Docker Desktop
+ OSType: linux
+$ docker run hello-world
+Unable to find image 'hello-world:latest' locally
+latest: Pulling from library/hello-world
+4f55086f7dd0: Pulling fs layer
+4f55086f7dd0: Download complete
+4f55086f7dd0: Pull complete
+d5e71e642bf5: Download complete
+Digest: sha256:c567b231f65614688711a75f31518a064258a51d442117a3e771a3a8fdba78ef
+Status: Downloaded newer image for hello-world:latest
+$ docker pull ubuntu:22.04
+Digest: sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11
+Status: Downloaded newer image for ubuntu:22.04
+docker.io/library/ubuntu:22.04
+$ docker images
+IMAGE                ID             DISK USAGE   CONTENT SIZE   EXTRA
+hello-world:latest   c567b231f656       25.9kB         9.49kB        
+ubuntu:22.04         076e7bf82319        119MB         31.7MB        
+$ docker run --name ubuntu-test ubuntu:22.04 echo "hi from ubuntu"   (실행 후 종료)
+hi from ubuntu
+$ docker ps ; docker ps -a
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+CONTAINER ID   IMAGE          COMMAND                   CREATED         STATUS                    PORTS     NAMES
+c6f2885dbe4f   ubuntu:22.04   "echo 'hi from ubunt…"   2 seconds ago   Exited (0) 1 second ago             ubuntu-test
+$ docker run -d --name ubuntu-keep ubuntu:22.04 sleep infinity   (유지)
+e1ffa5e249057ffbffecfda5fef7d1bb470e0f16d1613284edca7ed21d7ee292
+$ docker ps
+CONTAINER ID   IMAGE          COMMAND            CREATED        STATUS                  PORTS     NAMES
+e1ffa5e24905   ubuntu:22.04   "sleep infinity"   1 second ago   Up Less than a second             ubuntu-keep
+$ docker exec ubuntu-keep bash -c "ls / | head -5; echo inside-container; cat /etc/os-release | head -2"
+bin
+boot
+dev
+etc
+home
+inside-container
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+NAME="Ubuntu"
+$ docker logs ubuntu-test
+hi from ubuntu
+$ docker stats --no-stream
+CONTAINER ID   NAME          CPU %     MEM USAGE / LIMIT     MEM %     NET I/O         BLOCK I/O   PIDS
+e1ffa5e24905   ubuntu-keep   0.00%     2.113MiB / 7.568GiB   0.03%     1.17kB / 126B   0B / 0B     1
+$ docker stop ubuntu-keep
+ubuntu-keep
+$ docker ps -a
+CONTAINER ID   IMAGE          COMMAND                   CREATED          STATUS                                PORTS     NAMES
+e1ffa5e24905   ubuntu:22.04   "sleep infinity"          8 seconds ago    Exited (137) Less than a second ago             ubuntu-keep
+c6f2885dbe4f   ubuntu:22.04   "echo 'hi from ubunt…"   10 seconds ago   Exited (0) 9 seconds ago                        ubuntu-test
