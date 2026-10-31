@@ -1,0 +1,34 @@
+$ git --version
+git version 2.55.0.windows.5
+$ git config --global --list | (이메일 마스킹)
+user.name=jeongyoungki
+user.email=j***@hanmail.net
+init.defaultbranch=main
+$ git config --list --show-origin | grep -E "user\.|init.defaultbranch" (이메일 마스킹)
+file:C:/Program Files/Git/etc/gitconfig	init.defaultbranch=master
+file:C:/Users/jyk90/.gitconfig	user.name=jeongyoungki
+file:C:/Users/jyk90/.gitconfig	user.email=j***@hanmail.net
+file:C:/Users/jyk90/.gitconfig	init.defaultbranch=main
+$ git branch --show-current
+fatal: detected dubious ownership in repository at 'E:/__000 코디세이/first-mission'
+'E:/__000 코디세이/first-mission' is on a file system that does not record ownership
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory 'E:/__000 코디세이/first-mission'
+$ gh auth status   (토큰은 gh가 마스킹/미표시)
+github.com
+  ✓ Logged in to github.com account jyk901 (keyring)
+  - Active account: true
+  - Git operations protocol: https
+  - Token: ****masked****
+  - Token scopes: 'gist', 'read:org', 'repo'
+# 트러블슈팅: dubious ownership (E:는 소유권 미기록 FAT32)
+$ git branch --show-current   (설정 전) → fatal: detected dubious ownership
+$ git config --global --add safe.directory "E:/__000 코디세이/first-mission"
+$ git config --global --get-all safe.directory
+E:/__000 코디세이/first-mission
+$ git branch --show-current
+main
+$ git config --local user.email → GitHub noreply 주소 사용(개인 이메일 공개 방지)
+core.repositoryformatversion=0
+user.email=<id>+jyk901@users.noreply.github.com
