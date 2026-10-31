@@ -30,7 +30,7 @@
 - [x] GitHub 로그인 및 저장소 연동 (gh 인증 + push)
 - [x] 트러블슈팅 3건
 - [x] 브라우저 접속 스크린샷 (주소창 포함)
-- [ ] VSCode GitHub 로그인 화면 → 아래 "한계" 참고
+- [x] VSCode GitHub 로그인 + 저장소 연동
 
 ## 4) 저장소 구조
 ```
@@ -426,6 +426,13 @@ $ git config --local user.email → GitHub noreply 주소 사용(개인 이메�
 core.repositoryformatversion=0
 user.email=<id>+jyk901@users.noreply.github.com
 ```
+**VSCode GitHub 로그인 및 저장소 연동**
+
+![VSCode GitHub 로그인](docs/screenshots/vscode_github_login.jpg)
+
+- 저장소: https://github.com/jyk901/codyssey-first-mission (공개, `main`을 `origin`으로 push)
+- VSCode 안에서 같은 폴더를 열었고, 계정 메뉴에 `jyk901 (GitHub)`가 표시된다.
+
 - **Git**은 내 컴퓨터에서 변경 이력을 관리하는 *로컬 버전관리 도구*, **GitHub**는 그 저장소를 원격에 올려 공유·협업하는 *플랫폼*이다.
 - 개인 이메일은 마스킹했고, 커밋 이메일은 GitHub noreply 주소를 사용했다. 토큰은 `gh`가 키링에 보관하며 이 저장소 어디에도 기록하지 않았다.
 
@@ -460,5 +467,5 @@ curl http://localhost:8080
 - 위 명령은 Docker Desktop(WSL2)이 실행 중이어야 한다. 경로(`C:/Users/jyk90/...`)는 내 PC 기준이므로 본인 경로로 바꿔 쓴다.
 
 ## 9) 한계 (정직한 기록)
-- **VSCode GitHub 로그인 화면**: 이 PC에는 `code` 명령이 없어 VSCode 연동은 수행하지 못했다. 대신 `gh auth login` 상태와 `git push` 결과로 GitHub 연동을 확인했다.
+- **VSCode 화면**: 계정 메뉴에 `jyk901 (GitHub)` 로그인 상태가 표시된다(아래). 화면 중앙의 어두운 사각형은 캡처 도구가 가린 다른 창이다. VSCode 폴더 신뢰(Workspace Trust) 창은 닫기만 해서 *Restricted Mode*로 남아 있다.
 - 로그는 실행 당시 출력을 모은 것이며, 시각/ID 등은 재실행 시 달라진다.
