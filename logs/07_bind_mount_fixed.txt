@@ -1,0 +1,16 @@
+# 원인 진단: E: 드라이브는 이동식(Removable, FAT32) → Docker(WSL2)에서 비어 보임
+$ docker run --rm -v "E:/.../bind-demo:/t:ro" alpine ls -la /t   → (빈 디렉터리)
+$ docker run --rm -v "C:/Users/jyk90/codyssey/bind-demo:/t:ro" alpine ls /t
+index.html
+
+# 해결: C: 드라이브 경로로 바인드 마운트
+$ echo "<h1>BEFORE: host file v1</h1>" > C:/Users/jyk90/codyssey/bind-demo/index.html
+$ docker run -d --name web-bind -p 8082:80 -v "C:/Users/jyk90/codyssey/bind-demo:/usr/share/nginx/html:ro" nginx:alpine
+d910a1e57a76ef2ce7ceff0b6af6e592f633cc9ecfd1fa15cd4e034e704fccf1
+$ curl -s http://localhost:8082   (변경 전)
+<h1>BEFORE: host file v1</h1>
+$ echo "<h1>AFTER: host file v2 (재시작 없이 반영)</h1>" > C:/Users/jyk90/codyssey/bind-demo/index.html
+$ curl -s http://localhost:8082   (변경 후)
+<h1>AFTER: host file v2 (재시작 없이 반영)</h1>
+$ docker inspect web-bind --format "{{json .Mounts}}"
+[{"Type":"bind","Source":"C:/Users/jyk90/codyssey/bind-demo","Destination":"/usr/share/nginx/html","Mode":"ro","RW":false,"Propagation":"rprivate"}]

@@ -1,0 +1,60 @@
+$ cat bind-demo/index.html   (호스트 파일, 변경 전)
+<h1>BEFORE: host file v1</h1>
+$ docker run -d --name web-bind -p 8082:80 -v "<host>/bind-demo:/usr/share/nginx/html:ro" nginx:alpine
+Unable to find image 'nginx:alpine' locally
+alpine: Pulling from library/nginx
+Digest: sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606
+Status: Downloaded newer image for nginx:alpine
+fd4961023189a6ee7c8fd3afefc9a44cd644ea0e094256ae75fa81b4db1ea161
+$ curl -s http://localhost:8082   (변경 전)
+<html>
+<head><title>403 Forbidden</title></head>
+<body>
+<center><h1>403 Forbidden</h1></center>
+<hr><center>nginx/1.31.8</center>
+</body>
+</html>
+$ echo "<h1>AFTER: host file v2 (컨테이너 재시작 없이 반영)</h1>" > bind-demo/index.html
+$ curl -s http://localhost:8082   (변경 후)
+<html>
+<head><title>403 Forbidden</title></head>
+<body>
+<center><h1>403 Forbidden</h1></center>
+<hr><center>nginx/1.31.8</center>
+</body>
+</html>
+$ docker exec web-bind cat /usr/share/nginx/html/index.html
+cat: can't open '/usr/share/nginx/html/index.html': No such file or directory
+
+===== Docker 볼륨 영속성 =====
+$ docker volume create mydata
+mydata
+$ docker run -d --name vol-test -v mydata:/data ubuntu:22.04 sleep infinity
+1a74335c66837f238bea83adb5b038d46a77089fd979d158455c74a92cd4832a
+$ docker exec vol-test bash -c "echo hi > /data/hello.txt && cat /data/hello.txt"
+hi
+$ docker rm -f vol-test   (컨테이너 삭제)
+vol-test
+$ docker ps -a --filter name=vol-test
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+$ docker volume ls
+DRIVER    VOLUME NAME
+local     mydata
+$ docker run -d --name vol-test2 -v mydata:/data ubuntu:22.04 sleep infinity
+6259ae2f79c1ae2f0e587819764edb8fc367cad2bf1a978368d3f41589ed3f2e
+$ docker exec vol-test2 cat /data/hello.txt   (삭제 후에도 유지)
+hi
+$ docker volume inspect mydata
+[
+    {
+        "CreatedAt": "2026-10-31T07:20:50Z",
+        "Driver": "local",
+        "Labels": null,
+        "Mountpoint": "/var/lib/docker/volumes/mydata/_data",
+        "Name": "mydata",
+        "Options": null,
+        "Scope": "local"
+    }
+]
+--- 대조: 볼륨 없이 쓴 데이터는 컨테이너 삭제 시 사라짐 ---
+ls: cannot access '/tmp/x.txt': No such file or directory
