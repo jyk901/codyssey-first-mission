@@ -467,5 +467,5 @@ curl http://localhost:8080
 - 위 명령은 Docker Desktop(WSL2)이 실행 중이어야 한다. 경로(`C:/Users/jyk90/...`)는 내 PC 기준이므로 본인 경로로 바꿔 쓴다.
 
 ## 9) 한계 (정직한 기록)
-- **VSCode 화면**: 계정 메뉴에 `jyk901 (GitHub)` 로그인 상태가 표시된다(아래). VSCode 폴더 신뢰(Workspace Trust) 창은 닫기만 해서 *Restricted Mode*로 남아 있다.
+- **VSCode 화면**: 계정 메뉴에 `jyk901 (GitHub)` 로그인 상태가 표시된다(아래). 이 폴더는 VSCode Workspace Trust에서 "Trust"로 설정했다(캡처 시점에는 Restricted Mode 표시가 남아 있다).
 - 로그는 실행 당시 출력을 모은 것이며, 시각/ID 등은 재실행 시 달라진다.
