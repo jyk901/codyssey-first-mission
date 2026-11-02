@@ -58,3 +58,22 @@ Start Port    End Port
      50000       50059     *
 
 → 9000은 8920~9019 예약 구간에 포함되어 사용할 수 없었다. 예약 구간 밖의 포트(예: 8200)로 재배치해 해결했다.
+
+## D. Linux에서 직접 실행 (ubuntu:22.04 컨테이너 안: lsof / ss / ps / kill)
+$ docker run --rm ubuntu:22.04 bash -c "<아래 절차>"   (lsof, iproute2, python3 는 컨테이너 안에 설치해서 사용)
+$ python3 -m http.server 8300 &    (서버 A 가 8300 점유)
+$ python3 -m http.server 8300      (서버 B 를 같은 포트로 시도 → 충돌)
+OSError: [Errno 98] Address already in use
+[1단계: 누가 쓰나] $ lsof -i :8300
+COMMAND PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+python3 527 root    3u  IPv4  59200      0t0  TCP *:8300 (LISTEN)
+[1단계 대안] $ ss -ltnp | grep :8300
+LISTEN 0      5            0.0.0.0:8300      0.0.0.0:*    users:(("python3",pid=527,fd=3))
+[2단계: PID 527 의 정체] $ ps -p 527 -o pid,comm,args
+    PID COMMAND         COMMAND
+    527 python3         python3 -m http.server 8300
+[3단계: 포트 해제] $ kill 527
+[4단계: 해제 확인] $ lsof -i :8300   (출력이 없으면 해제됨)
+(exit=1)
+[5단계: 재실행] $ python3 -m http.server 8300 &  ; curl 로 응답 확인
+HTTP 200

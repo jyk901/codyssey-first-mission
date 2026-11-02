@@ -208,7 +208,9 @@ To generate this message, Docker took the following steps:
 - **종료/유지 차이**: `docker run ubuntu echo ...`는 명령이 끝나면 컨테이너도 `Exited (0)`로 끝난다. `sleep infinity`처럼 계속 도는 프로세스(PID 1)가 있으면 `Up` 상태로 유지되고 `docker exec`로 들어갈 수 있다. `docker stop`으로 멈추면 `Exited (137)`(SIGKILL 종료 코드)이 된다.
 
 ### 6-3-1) 이미지와 컨테이너의 차이 (핵심 개념)
-**이미지(image)는 읽기 전용 템플릿, 컨테이너(container)는 그 이미지로 만든 실행 인스턴스**다. 붕어빵 틀과 구워 낸 붕어빵의 관계와 같다.
+**한 문단 요약**: 이미지는 `docker build`로 만든 **읽기 전용 템플릿(불변)**이고, 컨테이너는 그 이미지를 `docker run`으로 실행한 **인스턴스**로 이미지 위에 쓰기 가능한 얇은 층이 하나 얹힌다. 예를 들어 같은 `my-web:1.0`으로 `web-a`, `web-b`를 띄운 뒤 `web-a`의 `index.html`만 고치면 `web-a`만 바뀌고 `web-b`와 이미지는 그대로이며, `web-a`를 삭제하면 그 변경은 사라지고 새 컨테이너는 다시 원래 내용으로 시작한다. 그래서 내용을 바꾸려면 새 이미지(`my-web:1.1`)를 빌드해야 하고, 변경을 즉시 반영하려면 바인드 마운트, 보존하려면 볼륨을 쓴다.
+
+**자세한 설명**: 이미지(image)는 읽기 전용 템플릿, 컨테이너(container)는 그 이미지로 만든 실행 인스턴스다. 붕어빵 틀과 구워 낸 붕어빵의 관계와 같다.
 이미지는 `docker build`로 한 번 만들면 **바뀌지 않는(불변) 읽기 전용 레이어의 묶음**이고(`docker history`로 `FROM → LABEL → ENV → COPY → HEALTHCHECK` 레이어가 보인다), 컨테이너는 `docker run` 때 그 위에 **쓰기 가능한 얇은 레이어 한 겹**을 얹어 프로세스로 실행한 것이다.
 실습에서 같은 `my-web:1.0` 이미지로 컨테이너 `web-a`, `web-b`를 만들고 `web-a` 안에서만 `index.html`을 고치자 `web-a`만 바뀌고 `web-b`는 그대로였다. `docker diff`에는 바뀐 파일이 컨테이너 쓰기 레이어의 변경분으로 나온다. `web-a`를 삭제하고 같은 이미지로 새 컨테이너(`web-c`)를 띄우면 **변경이 사라지고 원래 내용으로 돌아온다**. 즉 컨테이너 안에서 한 수정은 이미지에 남지 않는다.
 
@@ -385,7 +387,7 @@ CONTAINER ID   NAME       CPU %     MEM USAGE / LIMIT     MEM %     NET I/O     
 | PID로 프로세스 확인 | `tasklist /FI "PID eq 29572"` | `ps -p 29572` |
 | 포트 해제 | `taskkill /PID 29572 /F` | `kill 29572` |
 
-(이 PC는 Windows라 Linux 명령은 같은 단계를 대응시킨 것이고, 직접 실행한 것은 Windows 명령이다.)
+Windows 명령은 이 PC에서, Linux 명령(`lsof`, `ss`, `ps`, `kill`)은 ubuntu 컨테이너 안에서 각각 직접 실행했다(로그의 C·D 구간).
 실습에서는 ① 컨테이너끼리 8090 충돌(점유 PID가 Docker 백엔드라 kill 하지 않고 8093으로 재배치), ② 연습용 파이썬 서버가 8200을 점유한 충돌(`netstat` → `tasklist` → `taskkill`로 해제 후 재실행 성공)을 재현했다. 또 점유 프로세스가 없는데도 실패하는 **Windows 예약 포트**(9000번, 8920~9019 구간)도 만났다.
 ```bash
 # 포트 충돌 재현 → 진단 → 해결 (Windows + Git Bash 환경)
@@ -448,6 +450,25 @@ Start Port    End Port
      50000       50059     *
 
 → 9000은 8920~9019 예약 구간에 포함되어 사용할 수 없었다. 예약 구간 밖의 포트(예: 8200)로 재배치해 해결했다.
+
+## D. Linux에서 직접 실행 (ubuntu:22.04 컨테이너 안: lsof / ss / ps / kill)
+$ docker run --rm ubuntu:22.04 bash -c "<아래 절차>"   (lsof, iproute2, python3 는 컨테이너 안에 설치해서 사용)
+$ python3 -m http.server 8300 &    (서버 A 가 8300 점유)
+$ python3 -m http.server 8300      (서버 B 를 같은 포트로 시도 → 충돌)
+OSError: [Errno 98] Address already in use
+[1단계: 누가 쓰나] $ lsof -i :8300
+COMMAND PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+python3 527 root    3u  IPv4  59200      0t0  TCP *:8300 (LISTEN)
+[1단계 대안] $ ss -ltnp | grep :8300
+LISTEN 0      5            0.0.0.0:8300      0.0.0.0:*    users:(("python3",pid=527,fd=3))
+[2단계: PID 527 의 정체] $ ps -p 527 -o pid,comm,args
+    PID COMMAND         COMMAND
+    527 python3         python3 -m http.server 8300
+[3단계: 포트 해제] $ kill 527
+[4단계: 해제 확인] $ lsof -i :8300   (출력이 없으면 해제됨)
+(exit=1)
+[5단계: 재실행] $ python3 -m http.server 8300 &  ; curl 로 응답 확인
+HTTP 200
 ```
 
 ### 6-6) 바인드 마운트 (호스트 변경이 즉시 반영)
