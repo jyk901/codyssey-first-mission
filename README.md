@@ -42,7 +42,7 @@ first-mission/
 ├── site/index.html        # 컨테이너에 COPY 되는 웹 서버 콘텐츠
 ├── bind-demo/index.html   # 바인드 마운트 실습용 파일 (최종 상태 사본)
 ├── docs/screenshots/      # 브라우저 접속 화면 (8080, 8081, 8082)
-└── logs/                  # 명령 + 출력 원문 로그 (01~11)
+└── logs/                  # 명령 + 출력 원문 로그 (01~12)
 ```
 
 ## 5) 검증 방법과 증거 위치
@@ -57,6 +57,7 @@ first-mission/
 | 볼륨 영속성 | `docker volume create`, 컨테이너 `rm -f` 후 재연결 | [logs/06_mount_volume.txt](logs/06_mount_volume.txt) |
 | 최종 상태 | `docker ps -a`, `docker images` | [logs/08_final_ps.txt](logs/08_final_ps.txt) |
 | Git/GitHub | `git config --list`, `gh auth status` | [logs/09_git_config.txt](logs/09_git_config.txt) |
+| git push 성공 | `git push -v`, `git ls-remote`, `gh api .../commits` | [logs/12_git_push.txt](logs/12_git_push.txt), [docs/screenshots/github_commits.png](docs/screenshots/github_commits.png) |
 | 이미지 vs 컨테이너 | `docker history/diff/build`, 같은 이미지로 컨테이너 N개 | [logs/10_image_vs_container.txt](logs/10_image_vs_container.txt) |
 | 포트 충돌 진단 | `netstat -ano`, `tasklist`, `taskkill`, `docker ps --filter publish` | [logs/11_port_conflict.txt](logs/11_port_conflict.txt) |
 
@@ -606,6 +607,52 @@ user.email=<id>+jyk901@users.noreply.github.com
 
 - **Git**은 내 컴퓨터에서 변경 이력을 관리하는 *로컬 버전관리 도구*, **GitHub**는 그 저장소를 원격에 올려 공유·협업하는 *플랫폼*이다.
 - 개인 이메일은 마스킹했고, 커밋 이메일은 GitHub noreply 주소를 사용했다. 토큰은 `gh`가 키링에 보관하며 이 저장소 어디에도 기록하지 않았다.
+
+### 6-9-1) git push 성공 증거
+원격 저장소: https://github.com/jyk901/codyssey-first-mission
+- 아래 로그에 **실제 `git push -v` 출력**(`36f0ae5..3402d65  main -> main`)과 **push 시각**(2026-11-02 13:23:06 +0900), 로컬 HEAD와 원격 `main`의 해시 일치, GitHub 서버에 기록된 커밋 시각이 들어 있다.
+- GitHub의 커밋/푸시 히스토리 화면:
+
+![GitHub 커밋 히스토리](docs/screenshots/github_commits.png)
+
+```bash
+# git push 성공 증거: 원격 설정, 로컬/원격 일치, 커밋 타임스탬프, 실제 push 출력
+$ git remote -v
+origin	https://github.com/jyk901/codyssey-first-mission.git (fetch)
+origin	https://github.com/jyk901/codyssey-first-mission.git (push)
+$ git branch -vv
+* main 36f0ae5 [origin/main] Docs: 평가 #12(이미지·컨테이너 차이)·#16(포트 충돌 진단) 보완, 트러블슈팅 추가
+$ git log --format="%h %ad %s" --date=iso-strict | head -12   (커밋 시각)
+36f0ae5 2026-11-02T13:20:28+09:00 Docs: 평가 #12(이미지·컨테이너 차이)·#16(포트 충돌 진단) 보완, 트러블슈팅 추가
+d4ac5ac 2026-11-02T13:20:27+09:00 Docs: 이미지/컨테이너 실험·포트 충돌 진단 로그 추가
+9d5caac 2026-10-31T17:40:15+09:00 Revert "Docs: exec/attach 차이 실습 로그와 설명 추가"
+3782607 2026-10-31T17:34:21+09:00 Docs: exec/attach 차이 실습 로그와 설명 추가
+717d564 2026-10-31T16:51:53+09:00 Docs: VSCode 폴더 Trust 설정 반영
+3570ef3 2026-10-31T16:50:06+09:00 Docs: VSCode GitHub 로그인 캡처 교체 (겹친 창 없는 버전)
+57341a2 2026-10-31T16:40:46+09:00 Docs: VSCode GitHub 로그인 증거 추가
+d51d77f 2026-10-31T16:28:53+09:00 Docs: 브라우저 접속 스크린샷 추가 및 README 갱신
+abb0573 2026-10-31T16:22:53+09:00 Docs: README 작성 (체크리스트, 증거, 트러블슈팅)
+b49aa01 2026-10-31T16:22:52+09:00 Docs: Git 설정 로그 추가
+93652b0 2026-10-31T16:22:51+09:00 Docs: 바인드 마운트·볼륨 영속성 검증 로그 추가
+d631b0e 2026-10-31T16:22:50+09:00 Docs: 빌드·포트 매핑 접속 로그 추가
+$ git rev-parse HEAD ; git ls-remote origin refs/heads/main   (로컬 HEAD = 원격 main 이면 push 반영됨)
+36f0ae555bcb9eb29e7ccf18b9d2cd9dd5482de2
+36f0ae555bcb9eb29e7ccf18b9d2cd9dd5482de2	refs/heads/main
+$ gh api repos/jyk901/codyssey-first-mission/commits --jq ".[:5][] | .sha[0:7] + \" \" + .commit.committer.date + \" \" + (.commit.message|split(\"\n\")[0])"   (GitHub 서버 기록)
+36f0ae5 2026-11-02T04:20:28Z Docs: 평가 #12(이미지·컨테이너 차이)·#16(포트 충돌 진단) 보완, 트러블슈팅 추가
+d4ac5ac 2026-11-02T04:20:27Z Docs: 이미지/컨테이너 실험·포트 충돌 진단 로그 추가
+9d5caac 2026-10-31T08:40:15Z Revert "Docs: exec/attach 차이 실습 로그와 설명 추가"
+3782607 2026-10-31T08:34:21Z Docs: exec/attach 차이 실습 로그와 설명 추가
+717d564 2026-10-31T07:51:53Z Docs: VSCode 폴더 Trust 설정 반영
+
+$ date; git push -v origin main   (로그 12 자체를 올린 실제 push 출력)
+2026-11-02 13:23:06 +0900
+Pushing to https://github.com/jyk901/codyssey-first-mission.git
+POST git-receive-pack (1710 bytes)
+To https://github.com/jyk901/codyssey-first-mission.git
+   36f0ae5..3402d65  main -> main
+updating local tracking ref 'refs/remotes/origin/main'
+```
 
 ## 7) 트러블슈팅
 
