@@ -28,7 +28,9 @@
 - [x] 볼륨 영속성 (컨테이너 삭제 전/후 비교)
 - [x] Git 사용자/기본 브랜치 설정 + `git config --list` 기록
 - [x] GitHub 로그인 및 저장소 연동 (gh 인증 + push)
-- [x] 트러블슈팅 3건
+- [x] 이미지/컨테이너 개념 정리 + 실험 (평가 #12 보완)
+- [x] 포트 충돌 진단 절차 + 실험 (평가 #16 보완)
+- [x] 트러블슈팅 6건
 - [x] 브라우저 접속 스크린샷 (주소창 포함)
 - [x] VSCode GitHub 로그인 + 저장소 연동
 
@@ -40,7 +42,7 @@ first-mission/
 ├── site/index.html        # 컨테이너에 COPY 되는 웹 서버 콘텐츠
 ├── bind-demo/index.html   # 바인드 마운트 실습용 파일 (최종 상태 사본)
 ├── docs/screenshots/      # 브라우저 접속 화면 (8080, 8081, 8082)
-└── logs/                  # 명령 + 출력 원문 로그 (01~09)
+└── logs/                  # 명령 + 출력 원문 로그 (01~11)
 ```
 
 ## 5) 검증 방법과 증거 위치
@@ -55,6 +57,8 @@ first-mission/
 | 볼륨 영속성 | `docker volume create`, 컨테이너 `rm -f` 후 재연결 | [logs/06_mount_volume.txt](logs/06_mount_volume.txt) |
 | 최종 상태 | `docker ps -a`, `docker images` | [logs/08_final_ps.txt](logs/08_final_ps.txt) |
 | Git/GitHub | `git config --list`, `gh auth status` | [logs/09_git_config.txt](logs/09_git_config.txt) |
+| 이미지 vs 컨테이너 | `docker history/diff/build`, 같은 이미지로 컨테이너 N개 | [logs/10_image_vs_container.txt](logs/10_image_vs_container.txt) |
+| 포트 충돌 진단 | `netstat -ano`, `tasklist`, `taskkill`, `docker ps --filter publish` | [logs/11_port_conflict.txt](logs/11_port_conflict.txt) |
 
 ## 6) 수행 로그
 
@@ -202,6 +206,91 @@ To generate this message, Docker took the following steps:
 ```
 - **종료/유지 차이**: `docker run ubuntu echo ...`는 명령이 끝나면 컨테이너도 `Exited (0)`로 끝난다. `sleep infinity`처럼 계속 도는 프로세스(PID 1)가 있으면 `Up` 상태로 유지되고 `docker exec`로 들어갈 수 있다. `docker stop`으로 멈추면 `Exited (137)`(SIGKILL 종료 코드)이 된다.
 
+### 6-3-1) 이미지와 컨테이너의 차이 (핵심 개념)
+**이미지(image)는 읽기 전용 템플릿, 컨테이너(container)는 그 이미지로 만든 실행 인스턴스**다. 붕어빵 틀과 구워 낸 붕어빵의 관계와 같다.
+이미지는 `docker build`로 한 번 만들면 **바뀌지 않는(불변) 읽기 전용 레이어의 묶음**이고(`docker history`로 `FROM → LABEL → ENV → COPY → HEALTHCHECK` 레이어가 보인다), 컨테이너는 `docker run` 때 그 위에 **쓰기 가능한 얇은 레이어 한 겹**을 얹어 프로세스로 실행한 것이다.
+실습에서 같은 `my-web:1.0` 이미지로 컨테이너 `web-a`, `web-b`를 만들고 `web-a` 안에서만 `index.html`을 고치자 `web-a`만 바뀌고 `web-b`는 그대로였다. `docker diff`에는 바뀐 파일이 컨테이너 쓰기 레이어의 변경분으로 나온다. `web-a`를 삭제하고 같은 이미지로 새 컨테이너(`web-c`)를 띄우면 **변경이 사라지고 원래 내용으로 돌아온다**. 즉 컨테이너 안에서 한 수정은 이미지에 남지 않는다.
+
+| 구분 | 이미지 | 컨테이너 |
+|---|---|---|
+| 성격 | 읽기 전용 템플릿(불변) | 실행 인스턴스(실행·중지·삭제 가능) |
+| 만드는 명령 | `docker build` | `docker run` |
+| 개수 관계 | 1개 | 같은 이미지에서 N개 (실습: web-a, web-b, web-c) |
+| 변경 반영 | 내용을 바꾸려면 **새로 빌드해 새 버전**(`my-web:1.1`)을 만든다 | 안에서 바꾼 내용은 **삭제하면 사라진다** |
+| 변경을 남기는 법 | — | 바인드 마운트(호스트 파일 즉시 반영, 6-6), 볼륨(삭제 후에도 보존, 6-7) |
+
+새 버전 반영도 확인했다. `site/index.html`을 `version: 1.1`로 바꿔 `my-web:1.1`을 새로 빌드하면 새 컨테이너(`web-d`)만 1.1을 보여주고, 이미 떠 있던 1.0 컨테이너(`web-b`)는 계속 1.0이었다.
+```bash
+# 이미지 = 읽기 전용 템플릿(my-web:1.0), 컨테이너 = 그 이미지로 실행한 인스턴스
+$ docker history my-web:1.0 | head -6   (이미지는 읽기 전용 레이어의 쌓임)
+IMAGE          CREATED        CREATED BY                                       SIZE      COMMENT
+3695e1e6e772   45 hours ago   HEALTHCHECK {Test:[CMD-SHELL wget -qO- http:…   0B        buildkit.dockerfile.v0
+<missing>      45 hours ago   COPY site/ /usr/share/nginx/html/ # buildkit     24.6kB    buildkit.dockerfile.v0
+<missing>      45 hours ago   ENV APP_ENV=dev                                  0B        buildkit.dockerfile.v0
+<missing>      45 hours ago   LABEL org.opencontainers.image.title=My-cust…   0B        buildkit.dockerfile.v0
+<missing>      11 days ago    RUN /bin/sh -c set -x     && apkArch="$(cat …   52.4MB    buildkit.dockerfile.v0
+
+## 1) 같은 이미지에서 컨테이너 2개 실행 (이미지 1개 : 컨테이너 N개)
+$ docker run -d --name web-a -p 8090:80 my-web:1.0 ; docker run -d --name web-b -p 8091:80 my-web:1.0
+e847e27348b6a8e8aa70a968b1e6d7051165ffc6ed65507272a94968f2533abc
+1609929aa9d28f1c2e8c7d2a536596b367130b41339657b0bcbe390eff62614b
+
+## 2) 컨테이너 A 안에서만 파일을 변경
+$ docker exec web-a sh -c "echo <h1>changed only in A</h1> > /usr/share/nginx/html/index.html"
+$ curl -s localhost:8090   (A)
+<h1>changed only in A</h1>
+$ curl -s localhost:8091 | grep h1   (B, 같은 이미지지만 영향 없음)
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ docker diff web-a   (컨테이너가 이미지 위에 얹은 쓰기 가능 레이어의 변경분)
+C /var
+C /var/cache
+C /var/cache/nginx
+A /var/cache/nginx/fastcgi_temp
+A /var/cache/nginx/proxy_temp
+A /var/cache/nginx/scgi_temp
+A /var/cache/nginx/uwsgi_temp
+A /var/cache/nginx/client_temp
+C /usr
+C /usr/share
+C /usr/share/nginx
+C /usr/share/nginx/html
+C /usr/share/nginx/html/index.html
+C /run
+A /run/nginx.pid
+C /etc
+C /etc/nginx
+C /etc/nginx/conf.d
+C /etc/nginx/conf.d/default.conf
+
+## 3) 컨테이너를 삭제하면 그 변경은 사라지고, 새 컨테이너는 다시 이미지 상태로 시작
+$ docker rm -f web-a ; docker run -d --name web-c -p 8090:80 my-web:1.0
+web-a
+847ae6f966b34fdd60bf1f3b0b05f38a6b480f85e8b64dfeb6664212c1c9a674
+$ curl -s localhost:8090 | grep h1
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ docker images my-web   (이미지는 그대로, 변경되지 않음)
+IMAGE        ID             DISK USAGE   CONTENT SIZE   EXTRA
+my-web:1.0   3695e1e6e772       93.6MB         26.3MB   U    
+
+## 4) 내용을 바꾸려면 이미지를 새로 빌드 (불변 → 새 버전 태그 1.1)
+$ docker build -t my-web:1.1 .   (site/index.html 의 version: 1.1 로 교체한 빌드 컨텍스트)
+#7 naming to docker.io/library/my-web:1.1 done
+#7 unpacking to docker.io/library/my-web:1.1 0.0s done
+#7 DONE 0.1s
+$ docker run -d --name web-d -p 8092:80 my-web:1.1 ; curl -s localhost:8092 | grep version
+61395c01caf7444077f7ca93d53f3f95b19a8f5775574ac5cc00ba8862ba0c7e
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>My Custom Nginx</title></head><body><h1>Hello from my custom nginx!</h1><p>version: 1.1</p></body></html>
+$ curl -s localhost:8091 | grep version   (기존 1.0 컨테이너는 그대로 1.0)
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}"
+NAMES     IMAGE        PORTS
+web-d     my-web:1.1   0.0.0.0:8092->80/tcp, [::]:8092->80/tcp
+web-c     my-web:1.0   0.0.0.0:8090->80/tcp, [::]:8090->80/tcp
+web-b     my-web:1.0   0.0.0.0:8091->80/tcp, [::]:8091->80/tcp
+
+## 5) 변경을 즉시 반영하는 방법은 바인드 마운트(로그 07), 보존하는 방법은 볼륨(로그 06)
+```
+
 ### 6-4) Dockerfile 기반 커스텀 이미지
 **선택한 방식: (A) 웹 서버 베이스 이미지 + 정적 콘텐츠 교체.** 베이스는 `nginx:alpine`.
 
@@ -277,6 +366,88 @@ CONTAINER ID   NAME       CPU %     MEM USAGE / LIMIT     MEM %     NET I/O     
 | ![8080](docs/screenshots/port_8080.png) | ![8081](docs/screenshots/port_8081.png) |
 
 - 컨테이너는 격리된 네트워크를 쓰므로, **호스트 포트 → 컨테이너 포트(`-p 8080:80`)** 로 연결해야 밖에서 접속할 수 있다. 같은 이미지를 두 포트(8080, 8081)에 띄워도 같은 응답이 나온다(재현성).
+
+### 6-5-1) 포트 충돌 진단 절차
+`docker run -p 8090:80` 이 `port is already allocated` 또는 `Only one usage of each socket address`로 실패하면 **그 포트를 이미 쓰는 프로세스가 있다**는 뜻이다. 아래 순서로 진단한다.
+
+1. **포트를 누가 쓰나 확인** — Windows: `netstat -ano | findstr LISTENING | findstr :포트` / Linux: `lsof -i :포트` 또는 `ss -ltnp | grep :포트`
+2. **PID의 정체 확인** — Windows: `tasklist /FI "PID eq PID번호"` / Linux: `ps -p PID번호 -o pid,comm`
+3. **컨테이너가 점유한 것인지 확인** — `docker ps --filter publish=포트`
+4. **해제 또는 재배치**
+   - 일반 프로그램이 점유 → **PID를 종료**해 포트를 비운다: Windows `taskkill /PID PID번호 /F` / Linux `kill PID번호` (안 되면 `kill -9`)
+   - 점유 PID가 `com.docker.backend`(Docker 자신)이면 **PID를 kill 하지 않는다**(Docker 전체가 죽는다). 점유 컨테이너를 `docker rm -f`로 정리하거나 **서비스를 다른 포트로 재배치**(`-p 8093:80`)한다.
+5. **해제 확인 후 재실행** — 같은 `netstat` 명령에 결과가 없는지 보고 `docker run`을 다시 한다.
+
+| 하는 일 | Windows | Linux |
+|---|---|---|
+| 포트 사용 프로세스 확인 | `netstat -ano \| findstr :8200` | `lsof -i :8200`, `ss -ltnp` |
+| PID로 프로세스 확인 | `tasklist /FI "PID eq 29572"` | `ps -p 29572` |
+| 포트 해제 | `taskkill /PID 29572 /F` | `kill 29572` |
+
+(이 PC는 Windows라 Linux 명령은 같은 단계를 대응시킨 것이고, 직접 실행한 것은 Windows 명령이다.)
+실습에서는 ① 컨테이너끼리 8090 충돌(점유 PID가 Docker 백엔드라 kill 하지 않고 8093으로 재배치), ② 연습용 파이썬 서버가 8200을 점유한 충돌(`netstat` → `tasklist` → `taskkill`로 해제 후 재실행 성공)을 재현했다. 또 점유 프로세스가 없는데도 실패하는 **Windows 예약 포트**(9000번, 8920~9019 구간)도 만났다.
+```bash
+# 포트 충돌 재현 → 진단 → 해결 (Windows + Git Bash 환경)
+# Linux 대응: netstat -ano → lsof -i :PORT 또는 ss -ltnp, tasklist → ps -p PID, taskkill /PID → kill PID
+
+## A. 컨테이너끼리 충돌 (8090은 web-c 가 이미 사용 중)
+$ docker run -d --name web-conflict -p 8090:80 my-web:1.0
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint web-conflict (b779ee8775a3647ef175dcb2e300b5b02b227ac51020cf4b0842d26628b765db): Bind for 0.0.0.0:8090 failed: port is already allocated
+$ docker ps -a --filter name=web-conflict --format "{{.Names}} {{.Status}}"   (컨테이너는 만들어졌지만 시작 실패)
+web-conflict Created
+[1단계: 누가 8090을 쓰나] $ netstat -ano | findstr LISTENING | findstr :8090
+  TCP    0.0.0.0:8090           0.0.0.0:0              LISTENING       32020
+  TCP    127.0.0.1:8090         0.0.0.0:0              LISTENING       34272
+  TCP    [::]:8090              [::]:0                 LISTENING       32020
+  TCP    [::1]:8090             [::]:0                 LISTENING       34272
+[2단계: PID 32020 의 정체] $ tasklist /FI "PID eq 32020"
+com.docker.backend.exe       32020 Console                    2    172,924 K
+[3단계: 컨테이너 관점] $ docker ps --filter publish=8090 --format "{{.Names}} {{.Ports}}"
+web-c 0.0.0.0:8090->80/tcp, [::]:8090->80/tcp
+→ 점유 PID는 Docker 백엔드(com.docker.backend)다. 이 PID를 kill 하면 Docker 전체가 종료되므로 kill 하지 않는다. 대신 점유 컨테이너를 정리하거나 서비스를 다른 포트로 재배치한다.
+[해결: 서비스 재배치] $ docker rm -f web-conflict ; docker run -d --name web-conflict -p 8093:80 my-web:1.0
+dc12aa0905b58c38aae6868179de8ac85ca3f30815aff56011e0d5c5b0b36313
+$ curl -s -o /dev/null -w "%{http_code}\n" localhost:8093
+200
+
+## B. 호스트 일반 프로세스와 충돌 → PID 확인 후 kill 로 포트 해제 (연습용 파이썬 서버 8200)
+$ docker run -d --name web-8200 -p 8200:80 my-web:1.0
+docker: Error response from daemon: ports are not available: exposing port TCP 0.0.0.0:8200 -> 127.0.0.1:0: listen tcp 0.0.0.0:8200: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+[1단계] $ netstat -ano | findstr LISTENING | findstr :8200
+  TCP    0.0.0.0:8200           0.0.0.0:0              LISTENING       29572
+  TCP    [::]:8200              [::]:0                 LISTENING       29572
+[2단계] $ tasklist /FI "PID eq 29572"
+python.exe                   29572 Console                    2     28,148 K
+[3단계: 포트 해제] $ taskkill /PID 29572 /F   (Linux: kill 29572)
+성공: 프로세스(PID 29572)가 종료되었습니다.
+[4단계: 해제 확인] $ netstat -ano | findstr LISTENING | findstr :8200   (출력이 없으면 해제됨)
+(결과 줄 수: 0)
+[5단계: 재실행] $ docker rm -f web-8200 ; docker run -d --name web-8200 -p 8200:80 my-web:1.0
+0f0a7eb67b769357619d3e6c8bb92fbb595f50a619b3d0190118a48ab4327ac1
+$ curl -s -o /dev/null -w "%{http_code}\n" localhost:8200
+200
+
+## C. 참고: Windows 예약 포트 (충돌처럼 보이지만 점유 프로세스가 없는 경우)
+$ docker run -d -p 9000:80 my-web:1.0   → listen tcp 0.0.0.0:9000: bind: An attempt was made to access a socket in a way forbidden by its access permissions.
+$ netstat -ano | findstr :9000 → 출력 없음 (점유 프로세스가 없다)
+(위 9000번 오류는 처음 실습 때 실제로 발생한 메시지를 옮긴 것이다)
+$ netsh interface ipv4 show excludedportrange protocol=tcp
+Protocol tcp Port Exclusion Ranges
+
+Start Port    End Port
+----------    --------
+      2869        2869
+      8454        8553
+      8554        8653
+      8654        8753
+      8754        8853
+      8920        9019
+      9020        9119
+     39721       39721
+     50000       50059     *
+
+→ 9000은 8920~9019 예약 구간에 포함되어 사용할 수 없었다. 예약 구간 밖의 포트(예: 8200)로 재배치해 해결했다.
+```
 
 ### 6-6) 바인드 마운트 (호스트 변경이 즉시 반영)
 처음 시도는 실패했고(트러블슈팅 1), C: 경로로 해결한 결과가 아래다.
@@ -456,6 +627,24 @@ user.email=<id>+jyk901@users.noreply.github.com
 - **원인 가설**: 폴더 소유자와 현재 사용자가 달라 Git이 보안상 거부.
 - **확인**: 메시지의 `file system that does not record ownership` → E:(FAT32)는 소유권 정보가 없음.
 - **해결**: 이 폴더만 예외 등록 `git config --global --add safe.directory "E:/__000 코디세이/first-mission"` (전체 `*` 허용은 피함).
+
+### ④ 포트 충돌 (`port is already allocated`)
+- **문제**: 같은 호스트 포트(8090)로 컨테이너를 또 실행하면 시작 실패.
+- **원인 가설**: ① 다른 컨테이너가 점유 ② 호스트 프로그램이 점유 ③ 오타.
+- **확인**: `netstat -ano`로 PID 32020 → `tasklist`로 `com.docker.backend` → `docker ps --filter publish=8090`으로 컨테이너 `web-c`가 점유한 것을 확인(상세 절차: 6-5-1).
+- **해결**: Docker 자신의 PID는 kill 하지 않고 서비스를 8093으로 재배치. 호스트 프로그램이 점유한 경우는 `taskkill /PID`로 해제 후 재실행.
+
+### ⑤ 점유 프로세스가 없는데 `forbidden by its access permissions` (Windows 예약 포트)
+- **문제**: `-p 9000:80` 실행 시 `bind: An attempt was made to access a socket in a way forbidden by its access permissions`.
+- **원인 가설**: 다른 프로세스 점유라면 `netstat`에 나와야 하는데 나오지 않음 → OS가 포트를 예약했을 가능성.
+- **확인**: `netsh interface ipv4 show excludedportrange protocol=tcp`에서 8920~9019 예약 구간에 9000이 포함됨을 확인.
+- **해결**: 예약 구간 밖의 포트(8200 등)를 사용.
+
+### ⑥ Docker Desktop 시작 오류 (Secrets Engine, `engine.sock.stale`)
+- **문제**: 재부팅 뒤 Docker Desktop이 `initializing Secrets Engine ... engine.sock.stale: The file cannot be accessed by the system`으로 종료.
+- **원인 가설**: 비정상 종료로 남은 낡은 소켓 파일을 Docker가 교체하지 못함.
+- **확인**: `%LOCALAPPDATA%\docker-secrets-engine\engine.sock`(0바이트)이 있었고 `Remove-Item`/`del`로는 삭제되지 않음.
+- **해결**: 삭제 대신 폴더 이름을 `docker-secrets-engine.old`로 변경(되돌릴 수 있음) 후 Docker Desktop 재시작. 이미지와 볼륨은 그대로 보존됐다("Reset to factory defaults"는 데이터가 지워지므로 사용하지 않음).
 
 ## 8) 재현 방법
 ```bash
