@@ -1,0 +1,68 @@
+# 이미지 = 읽기 전용 템플릿(my-web:1.0), 컨테이너 = 그 이미지로 실행한 인스턴스
+$ docker history my-web:1.0 | head -6   (이미지는 읽기 전용 레이어의 쌓임)
+IMAGE          CREATED        CREATED BY                                       SIZE      COMMENT
+3695e1e6e772   45 hours ago   HEALTHCHECK {Test:[CMD-SHELL wget -qO- http:…   0B        buildkit.dockerfile.v0
+<missing>      45 hours ago   COPY site/ /usr/share/nginx/html/ # buildkit     24.6kB    buildkit.dockerfile.v0
+<missing>      45 hours ago   ENV APP_ENV=dev                                  0B        buildkit.dockerfile.v0
+<missing>      45 hours ago   LABEL org.opencontainers.image.title=My-cust…   0B        buildkit.dockerfile.v0
+<missing>      11 days ago    RUN /bin/sh -c set -x     && apkArch="$(cat …   52.4MB    buildkit.dockerfile.v0
+
+## 1) 같은 이미지에서 컨테이너 2개 실행 (이미지 1개 : 컨테이너 N개)
+$ docker run -d --name web-a -p 8090:80 my-web:1.0 ; docker run -d --name web-b -p 8091:80 my-web:1.0
+e847e27348b6a8e8aa70a968b1e6d7051165ffc6ed65507272a94968f2533abc
+1609929aa9d28f1c2e8c7d2a536596b367130b41339657b0bcbe390eff62614b
+
+## 2) 컨테이너 A 안에서만 파일을 변경
+$ docker exec web-a sh -c "echo <h1>changed only in A</h1> > /usr/share/nginx/html/index.html"
+$ curl -s localhost:8090   (A)
+<h1>changed only in A</h1>
+$ curl -s localhost:8091 | grep h1   (B, 같은 이미지지만 영향 없음)
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ docker diff web-a   (컨테이너가 이미지 위에 얹은 쓰기 가능 레이어의 변경분)
+C /var
+C /var/cache
+C /var/cache/nginx
+A /var/cache/nginx/fastcgi_temp
+A /var/cache/nginx/proxy_temp
+A /var/cache/nginx/scgi_temp
+A /var/cache/nginx/uwsgi_temp
+A /var/cache/nginx/client_temp
+C /usr
+C /usr/share
+C /usr/share/nginx
+C /usr/share/nginx/html
+C /usr/share/nginx/html/index.html
+C /run
+A /run/nginx.pid
+C /etc
+C /etc/nginx
+C /etc/nginx/conf.d
+C /etc/nginx/conf.d/default.conf
+
+## 3) 컨테이너를 삭제하면 그 변경은 사라지고, 새 컨테이너는 다시 이미지 상태로 시작
+$ docker rm -f web-a ; docker run -d --name web-c -p 8090:80 my-web:1.0
+web-a
+847ae6f966b34fdd60bf1f3b0b05f38a6b480f85e8b64dfeb6664212c1c9a674
+$ curl -s localhost:8090 | grep h1
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ docker images my-web   (이미지는 그대로, 변경되지 않음)
+IMAGE        ID             DISK USAGE   CONTENT SIZE   EXTRA
+my-web:1.0   3695e1e6e772       93.6MB         26.3MB   U    
+
+## 4) 내용을 바꾸려면 이미지를 새로 빌드 (불변 → 새 버전 태그 1.1)
+$ docker build -t my-web:1.1 .   (site/index.html 의 version: 1.1 로 교체한 빌드 컨텍스트)
+#7 naming to docker.io/library/my-web:1.1 done
+#7 unpacking to docker.io/library/my-web:1.1 0.0s done
+#7 DONE 0.1s
+$ docker run -d --name web-d -p 8092:80 my-web:1.1 ; curl -s localhost:8092 | grep version
+61395c01caf7444077f7ca93d53f3f95b19a8f5775574ac5cc00ba8862ba0c7e
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>My Custom Nginx</title></head><body><h1>Hello from my custom nginx!</h1><p>version: 1.1</p></body></html>
+$ curl -s localhost:8091 | grep version   (기존 1.0 컨테이너는 그대로 1.0)
+<body><h1>Hello from my custom nginx!</h1><p>version: 1.0</p></body></html>
+$ docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}"
+NAMES     IMAGE        PORTS
+web-d     my-web:1.1   0.0.0.0:8092->80/tcp, [::]:8092->80/tcp
+web-c     my-web:1.0   0.0.0.0:8090->80/tcp, [::]:8090->80/tcp
+web-b     my-web:1.0   0.0.0.0:8091->80/tcp, [::]:8091->80/tcp
+
+## 5) 변경을 즉시 반영하는 방법은 바인드 마운트(로그 07), 보존하는 방법은 볼륨(로그 06)

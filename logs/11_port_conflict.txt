@@ -1,0 +1,60 @@
+# 포트 충돌 재현 → 진단 → 해결 (Windows + Git Bash 환경)
+# Linux 대응: netstat -ano → lsof -i :PORT 또는 ss -ltnp, tasklist → ps -p PID, taskkill /PID → kill PID
+
+## A. 컨테이너끼리 충돌 (8090은 web-c 가 이미 사용 중)
+$ docker run -d --name web-conflict -p 8090:80 my-web:1.0
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint web-conflict (b779ee8775a3647ef175dcb2e300b5b02b227ac51020cf4b0842d26628b765db): Bind for 0.0.0.0:8090 failed: port is already allocated
+$ docker ps -a --filter name=web-conflict --format "{{.Names}} {{.Status}}"   (컨테이너는 만들어졌지만 시작 실패)
+web-conflict Created
+[1단계: 누가 8090을 쓰나] $ netstat -ano | findstr LISTENING | findstr :8090
+  TCP    0.0.0.0:8090           0.0.0.0:0              LISTENING       32020
+  TCP    127.0.0.1:8090         0.0.0.0:0              LISTENING       34272
+  TCP    [::]:8090              [::]:0                 LISTENING       32020
+  TCP    [::1]:8090             [::]:0                 LISTENING       34272
+[2단계: PID 32020 의 정체] $ tasklist /FI "PID eq 32020"
+com.docker.backend.exe       32020 Console                    2    172,924 K
+[3단계: 컨테이너 관점] $ docker ps --filter publish=8090 --format "{{.Names}} {{.Ports}}"
+web-c 0.0.0.0:8090->80/tcp, [::]:8090->80/tcp
+→ 점유 PID는 Docker 백엔드(com.docker.backend)다. 이 PID를 kill 하면 Docker 전체가 종료되므로 kill 하지 않는다. 대신 점유 컨테이너를 정리하거나 서비스를 다른 포트로 재배치한다.
+[해결: 서비스 재배치] $ docker rm -f web-conflict ; docker run -d --name web-conflict -p 8093:80 my-web:1.0
+dc12aa0905b58c38aae6868179de8ac85ca3f30815aff56011e0d5c5b0b36313
+$ curl -s -o /dev/null -w "%{http_code}\n" localhost:8093
+200
+
+## B. 호스트 일반 프로세스와 충돌 → PID 확인 후 kill 로 포트 해제 (연습용 파이썬 서버 8200)
+$ docker run -d --name web-8200 -p 8200:80 my-web:1.0
+docker: Error response from daemon: ports are not available: exposing port TCP 0.0.0.0:8200 -> 127.0.0.1:0: listen tcp 0.0.0.0:8200: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+[1단계] $ netstat -ano | findstr LISTENING | findstr :8200
+  TCP    0.0.0.0:8200           0.0.0.0:0              LISTENING       29572
+  TCP    [::]:8200              [::]:0                 LISTENING       29572
+[2단계] $ tasklist /FI "PID eq 29572"
+python.exe                   29572 Console                    2     28,148 K
+[3단계: 포트 해제] $ taskkill /PID 29572 /F   (Linux: kill 29572)
+성공: 프로세스(PID 29572)가 종료되었습니다.
+[4단계: 해제 확인] $ netstat -ano | findstr LISTENING | findstr :8200   (출력이 없으면 해제됨)
+(결과 줄 수: 0)
+[5단계: 재실행] $ docker rm -f web-8200 ; docker run -d --name web-8200 -p 8200:80 my-web:1.0
+0f0a7eb67b769357619d3e6c8bb92fbb595f50a619b3d0190118a48ab4327ac1
+$ curl -s -o /dev/null -w "%{http_code}\n" localhost:8200
+200
+
+## C. 참고: Windows 예약 포트 (충돌처럼 보이지만 점유 프로세스가 없는 경우)
+$ docker run -d -p 9000:80 my-web:1.0   → listen tcp 0.0.0.0:9000: bind: An attempt was made to access a socket in a way forbidden by its access permissions.
+$ netstat -ano | findstr :9000 → 출력 없음 (점유 프로세스가 없다)
+(위 9000번 오류는 처음 실습 때 실제로 발생한 메시지를 옮긴 것이다)
+$ netsh interface ipv4 show excludedportrange protocol=tcp
+Protocol tcp Port Exclusion Ranges
+
+Start Port    End Port
+----------    --------
+      2869        2869
+      8454        8553
+      8554        8653
+      8654        8753
+      8754        8853
+      8920        9019
+      9020        9119
+     39721       39721
+     50000       50059     *
+
+→ 9000은 8920~9019 예약 구간에 포함되어 사용할 수 없었다. 예약 구간 밖의 포트(예: 8200)로 재배치해 해결했다.
